@@ -609,7 +609,7 @@ instance.get('/:id/proxy', authMiddleware, async (c) => {
  * GET /instance/:id/proxy/check
  * Check proxy connection and return egress IP
  */
-instance.get('/:id/proxy/check', authMiddleware, async (c) => {
+instance.get('/:id/proxy/check', async (c) => {
     const { id } = c.req.param();
     const user = c.get('user');
 
