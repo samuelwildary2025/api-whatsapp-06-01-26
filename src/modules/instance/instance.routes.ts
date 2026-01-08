@@ -33,6 +33,46 @@ const updateProxySchema = z.object({
 });
 
 // ================================
+// Proxy Check Route (Placed top for priority)
+// ================================
+
+/**
+ * GET /instance/:id/check-proxy
+ * Check proxy connection and return egress IP
+ */
+instance.get('/:id/check-proxy', async (c) => {
+    const { id } = c.req.param();
+    // Auth disabled for testing as requested
+    // const user = c.get('user');
+
+    const instanceData = await prisma.instance.findFirst({
+        where: {
+            id,
+            // OR: [{ userId: user.userId }, { user: { role: 'ADMIN' } }],
+        },
+    });
+
+    if (!instanceData) {
+        throw new HTTPException(404, { message: 'Instance not found' });
+    }
+
+    // Checking proxy via whatsmeow manager
+    const result = await waManager.checkProxy(id);
+
+    if (result.error) {
+        throw new HTTPException(502, { message: result.error });
+    }
+
+    return c.json({
+        success: true,
+        data: {
+            ip: result.ip,
+            message: 'Proxy check successful'
+        }
+    });
+});
+
+// ================================
 // Instance Connection Routes
 // ================================
 
@@ -609,34 +649,7 @@ instance.get('/:id/proxy', authMiddleware, async (c) => {
  * GET /instance/:id/proxy/check
  * Check proxy connection and return egress IP
  */
-instance.get('/:id/proxy/check', async (c) => {
-    const { id } = c.req.param();
-    const user = c.get('user');
 
-    const instanceData = await prisma.instance.findFirst({
-        where: {
-            id,
-            OR: [{ userId: user.userId }, { user: { role: 'ADMIN' } }],
-        },
-    });
-
-    if (!instanceData) {
-        throw new HTTPException(404, { message: 'Instance not found' });
-    }
-
-    const result = await waManager.checkProxy(id);
-
-    if (result.error) {
-        throw new HTTPException(502, { message: result.error });
-    }
-
-    return c.json({
-        success: true,
-        data: {
-            ip: result.ip
-        }
-    });
-});
 
 /**
  * PATCH /instance/:id/proxy
