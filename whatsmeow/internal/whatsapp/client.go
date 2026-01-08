@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
@@ -1931,6 +1932,54 @@ func (m *Manager) buildProxyURL(host, port, username, password, protocol string)
 	}
 
 	return proxyURL
+}
+
+// CheckProxyIP checks the external IP address using the instance's proxy configuration
+func (m *Manager) CheckProxyIP(instanceID string) (string, error) {
+	inst, ok := m.GetInstance(instanceID)
+	if !ok {
+		return "", fmt.Errorf("instance not found")
+	}
+
+	// Get proxy settings
+	inst.mu.RLock()
+	host := inst.ProxyHost
+	port := inst.ProxyPort
+	username := inst.ProxyUsername
+	password := inst.ProxyPassword
+	protocol := inst.ProxyProtocol
+	inst.mu.RUnlock()
+
+	transport := &http.Transport{}
+
+	// Configure proxy if set
+	if host != "" && port != "" {
+		proxyURLStr := m.buildProxyURL(host, port, username, password, protocol)
+		parsedURL, err := url.Parse(proxyURLStr)
+		if err != nil {
+			return "", fmt.Errorf("invalid proxy URL: %w", err)
+		}
+		transport.Proxy = http.ProxyURL(parsedURL)
+	}
+
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Second,
+	}
+
+	// Request to get public IP
+	resp, err := client.Get("https://api.ipify.org")
+	if err != nil {
+		return "", fmt.Errorf("failed to check IP: %w", err)
+	}
+	defer resp.Body.Close()
+
+	ipBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", fmt.Errorf("failed to read IP response: %w", err)
+	}
+
+	return string(ipBytes), nil
 }
 
 // GetProxy returns the current proxy configuration for an instance

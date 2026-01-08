@@ -244,6 +244,20 @@ func (h *Handlers) SetProxy(w http.ResponseWriter, r *http.Request) {
 	successResponse(w, h.manager.GetProxy(instanceID))
 }
 
+// CheckProxyIP checks the external IP for an instance
+func (h *Handlers) CheckProxyIP(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	instanceID := vars["id"]
+
+	ip, err := h.manager.CheckProxyIP(instanceID)
+	if err != nil {
+		errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	successResponse(w, map[string]string{"ip": ip})
+}
+
 // GetQRCode gets QR code for instance
 func (h *Handlers) GetQRCode(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
