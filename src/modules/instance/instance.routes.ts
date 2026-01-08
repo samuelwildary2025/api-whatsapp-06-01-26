@@ -229,16 +229,16 @@ instance.post('/:id/logout', authMiddleware, async (c) => {
 
 /**
  * GET /instance/:id/status
- * Get instance connection status
+ * Get instance status
  */
-instance.get('/:id/status', authMiddleware, async (c) => {
+instance.get('/:id/status', async (c) => {
     const { id } = c.req.param();
-    const user = c.get('user');
+    // const user = c.get('user');
 
     const instanceData = await prisma.instance.findFirst({
         where: {
             id,
-            OR: [{ userId: user.userId }, { user: { role: 'ADMIN' } }],
+            // OR: [{ userId: user.userId }, { user: { role: 'ADMIN' } }],
         },
     });
 
@@ -247,18 +247,16 @@ instance.get('/:id/status', authMiddleware, async (c) => {
     }
 
     const status = waManager.getStatus(id);
-    const qrData = waManager.getQRCode(id);
 
     return c.json({
         success: true,
         data: {
-            id: instanceData.id,
+            status,
             name: instanceData.name,
-            status: status !== 'not_found' ? status : instanceData.status.toLowerCase(),
-            waNumber: instanceData.waNumber,
             waName: instanceData.waName,
-            qrCode: qrData.qrBase64,
-        },
+            waNumber: instanceData.waNumber,
+            profilePictureUrl: instanceData.profilePictureUrl,
+        }
     });
 });
 
