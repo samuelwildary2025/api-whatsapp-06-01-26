@@ -633,7 +633,7 @@ func (m *Manager) GetPairingCode(instanceID string) string {
 }
 
 // MarkChatAsRead marks a chat as read
-func (m *Manager) MarkChatAsRead(instanceID, chatID string) error {
+func (m *Manager) MarkChatAsRead(instanceID, chatID string, messageIDs []string) error {
 	inst, ok := m.GetInstance(instanceID)
 	if !ok {
 		return fmt.Errorf("instance not found")
@@ -646,13 +646,40 @@ func (m *Manager) MarkChatAsRead(instanceID, chatID string) error {
 		return fmt.Errorf("client not initialized")
 	}
 
-	chatJID, err := types.ParseJID(chatID)
-	if err != nil {
-		return err
+	// Clean and parse chat JID
+	chatID = strings.TrimPrefix(chatID, "+")
+	chatID = strings.ReplaceAll(chatID, " ", "")
+	chatID = strings.ReplaceAll(chatID, "-", "")
+
+	if !strings.Contains(chatID, "@") {
+		chatID = chatID + "@s.whatsapp.net"
 	}
 
+	chatJID, err := types.ParseJID(chatID)
+	if err != nil {
+		return fmt.Errorf("invalid chat JID: %w", err)
+	}
+
+	// Convert string IDs to MessageID type
+	var msgIDs []types.MessageID
+	for _, id := range messageIDs {
+		msgIDs = append(msgIDs, types.MessageID(id))
+	}
+
+	// If no message IDs provided, we need at least one
+	// Use a placeholder that whatsmeow might accept or return error
+	if len(msgIDs) == 0 {
+		return fmt.Errorf("at least one messageId is required to mark chat as read")
+	}
+
+	log.Info().
+		Str("instanceId", instanceID).
+		Str("chatJID", chatJID.String()).
+		Int("messageCount", len(msgIDs)).
+		Msg("Marking messages as read")
+
 	// Mark as read
-	return client.MarkRead(context.Background(), []types.MessageID{}, time.Now(), chatJID, types.EmptyJID)
+	return client.MarkRead(context.Background(), msgIDs, time.Now(), chatJID, types.EmptyJID)
 }
 
 // Disconnect disconnects an instance

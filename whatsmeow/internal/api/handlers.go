@@ -683,8 +683,10 @@ func (h *Handlers) ReactToMessage(w http.ResponseWriter, r *http.Request) {
 
 // MarkChatAsReadRequest represents mark chat as read request
 type MarkChatAsReadRequest struct {
-	InstanceID string `json:"instanceId"`
-	ChatID     string `json:"chatId"`
+	InstanceID string   `json:"instanceId"`
+	ChatID     string   `json:"chatId"`
+	MessageID  string   `json:"messageId,omitempty"`  // Optional: specific message to mark as read
+	MessageIDs []string `json:"messageIds,omitempty"` // Optional: multiple messages to mark as read
 }
 
 // MarkChatAsRead marks a chat as read
@@ -702,12 +704,22 @@ func (h *Handlers) MarkChatAsRead(w http.ResponseWriter, r *http.Request) {
 
 	chatID := cleanPhoneNumber(req.ChatID)
 
+	// Build message IDs list
+	var messageIDs []string
+	if req.MessageID != "" {
+		messageIDs = append(messageIDs, req.MessageID)
+	}
+	if len(req.MessageIDs) > 0 {
+		messageIDs = append(messageIDs, req.MessageIDs...)
+	}
+
 	log.Info().
 		Str("instanceId", req.InstanceID).
 		Str("chatId", chatID).
+		Int("messageCount", len(messageIDs)).
 		Msg("Marking chat as read")
 
-	err := h.manager.MarkChatAsRead(req.InstanceID, chatID)
+	err := h.manager.MarkChatAsRead(req.InstanceID, chatID, messageIDs)
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to mark chat as read")
 		errorResponse(w, http.StatusInternalServerError, err.Error())

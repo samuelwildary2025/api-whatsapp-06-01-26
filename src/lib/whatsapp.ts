@@ -89,7 +89,7 @@ export interface IWhatsAppManager extends EventEmitter {
     muteChat(instanceId: string, chatId: string, duration?: Date | null): Promise<void>;
     unmuteChat(instanceId: string, chatId: string): Promise<void>;
     markChatAsUnread(instanceId: string, chatId: string): Promise<void>;
-    markChatAsRead(instanceId: string, chatId: string): Promise<void>;
+    markChatAsRead(instanceId: string, chatId: string, messageId?: string): Promise<void>;
 
     // Contacts
     getContacts(instanceId: string): Promise<any[]>;

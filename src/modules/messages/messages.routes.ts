@@ -416,10 +416,19 @@ messages.post('/search', async (c) => {
 messages.post('/read', async (c) => {
     const instanceId = c.get('instanceId');
     const body = await c.req.json();
-    const { chatId } = z.object({ chatId: z.string().min(1) }).parse(body);
+    const { chatId, messageId } = z.object({
+        chatId: z.string().min(1),
+        messageId: z.string().optional(),
+    }).parse(body);
+
+    if (!messageId) {
+        throw new HTTPException(400, {
+            message: 'messageId is required to mark chat as read',
+        });
+    }
 
     try {
-        await waManager.markChatAsRead(instanceId, chatId);
+        await waManager.markChatAsRead(instanceId, chatId, messageId);
 
         return c.json({
             success: true,

@@ -603,15 +603,21 @@ class WhatsAppBridge extends EventEmitter {
         });
     }
 
-    async markChatAsRead(instanceId: string, chatId: string) {
+    async markChatAsRead(instanceId: string, chatId: string, messageId?: string) {
         const cleanedChatId = chatId.replace(/\D/g, '');
+
+        const body: Record<string, unknown> = {
+            instanceId,
+            chatId: cleanedChatId,
+        };
+
+        if (messageId) {
+            body.messageId = messageId;
+        }
 
         await this.request<void>('/message/read', {
             method: 'POST',
-            body: JSON.stringify({
-                instanceId,
-                chatId: cleanedChatId,
-            }),
+            body: JSON.stringify(body),
         });
     }
 
