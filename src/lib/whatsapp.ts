@@ -62,6 +62,7 @@ export interface IWhatsAppManager extends EventEmitter {
     loadInstanceSettings(instanceId: string): Promise<void>;
     updateInstanceSettings(instanceId: string, settings: any): Promise<void>;
     setProxy(instanceId: string, proxy: { proxyHost: string; proxyPort: string; proxyUsername: string; proxyPassword: string; proxyProtocol: string }): Promise<void>;
+    checkProxy(instanceId: string): Promise<{ ip?: string; error?: string }>;
     reconnectAll(): Promise<void>;
 
     // Messages
