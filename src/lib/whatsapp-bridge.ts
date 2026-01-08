@@ -433,6 +433,28 @@ class WhatsAppBridge extends EventEmitter {
         }
     }
 
+    /**
+     * Check proxy connection
+     */
+    async checkProxy(instanceId: string): Promise<{ ip?: string; error?: string }> {
+        try {
+            const resp = await fetch(`${this.baseUrl}/instance/${instanceId}/proxy/check`, {
+                method: 'GET',
+            });
+
+            if (!resp.ok) {
+                const data = await resp.json() as { error?: string };
+                return { error: data.error || 'Failed to check proxy' };
+            }
+
+            const data = await resp.json() as { success: boolean; data: { ip: string } };
+            return { ip: data.data.ip };
+        } catch (error) {
+            console.error('Error checking whatsmeow proxy:', error);
+            return { error: error instanceof Error ? error.message : 'Unknown error' };
+        }
+    }
+
     // ================================
     // Message Methods
     // ================================
