@@ -451,13 +451,20 @@ func (m *Manager) setupEventHandlers(inst *Instance) {
 			inst.mu.RUnlock()
 
 			if shouldReject {
-				log.Info().Str("instanceId", inst.ID).Str("callId", v.CallID).Msg("Auto-rejecting call")
-				err := inst.Client.RejectCall(context.Background(), v.CallCreator, v.CallID)
-				if err != nil {
-					log.Error().Err(err).Msg("Failed to reject call")
-				} else {
-					log.Info().Str("callId", v.CallID).Msg("Call rejected successfully")
-				}
+				// Run rejection in goroutine with slight delay to ensure call is established
+				go func(callCreator types.JID, callID string) {
+					// Small delay to ensure call is properly established
+					time.Sleep(500 * time.Millisecond)
+
+					log.Info().Str("instanceId", inst.ID).Str("callId", callID).Str("from", callCreator.String()).Msg("Auto-rejecting call")
+
+					err := inst.Client.RejectCall(context.Background(), callCreator, callID)
+					if err != nil {
+						log.Error().Err(err).Str("callId", callID).Msg("Failed to reject call")
+					} else {
+						log.Info().Str("callId", callID).Msg("Call rejected successfully")
+					}
+				}(v.CallCreator, v.CallID)
 			}
 		}
 	})
