@@ -856,6 +856,33 @@ func (h *Handlers) WebSocketHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // ============================================
+// Contact Resolution Handler
+// ============================================
+
+// GetContactInfo resolves contact information, attempting to resolve LID to phone number
+func (h *Handlers) GetContactInfo(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	instanceID := vars["instanceId"]
+	jid := vars["jid"]
+
+	if instanceID == "" || jid == "" {
+		errorResponse(w, http.StatusBadRequest, "instanceId and jid are required")
+		return
+	}
+
+	log.Info().Str("instanceId", instanceID).Str("jid", jid).Msg("Getting contact info")
+
+	contactInfo, err := h.manager.GetContactInfo(instanceID, jid)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to get contact info")
+		errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	successResponse(w, contactInfo)
+}
+
+// ============================================
 // Helpers
 // ============================================
 

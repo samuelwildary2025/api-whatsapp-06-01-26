@@ -93,15 +93,26 @@ type Event struct {
 
 // MessageData represents message data
 type MessageData struct {
-	ID        string `json:"id"`
-	From      string `json:"from"`
-	To        string `json:"to"`
-	Body      string `json:"body"`
-	Type      string `json:"type"`
-	Timestamp int64  `json:"timestamp"`
-	FromMe    bool   `json:"fromMe"`
-	IsGroup   bool   `json:"isGroup"`
-	PushName  string `json:"pushName,omitempty"`
+	ID            string `json:"id"`
+	From          string `json:"from"`
+	To            string `json:"to"`
+	Body          string `json:"body"`
+	Type          string `json:"type"`
+	Timestamp     int64  `json:"timestamp"`
+	FromMe        bool   `json:"fromMe"`
+	IsGroup       bool   `json:"isGroup"`
+	PushName      string `json:"pushName,omitempty"`
+	ResolvedPhone string `json:"resolvedPhone,omitempty"`
+}
+
+// ResolvedContactInfo represents resolved contact information
+type ResolvedContactInfo struct {
+	OriginalJID   string `json:"originalJid"`
+	ResolvedPhone string `json:"resolvedPhone,omitempty"`
+	PushName      string `json:"pushName,omitempty"`
+	FullName      string `json:"fullName,omitempty"`
+	IsLID         bool   `json:"isLid"`
+	Resolved      bool   `json:"resolved"`
 }
 
 // NewManager creates a new WhatsApp manager
@@ -479,17 +490,128 @@ func (m *Manager) formatMessage(instanceID string, msg *events.Message) MessageD
 		body = msg.Message.GetExtendedTextMessage().GetText()
 	}
 
-	return MessageData{
-		ID:        msg.Info.ID,
-		From:      msg.Info.Sender.String(),
-		To:        msg.Info.Chat.String(),
-		Body:      body,
-		Type:      "text",
-		Timestamp: msg.Info.Timestamp.Unix(),
-		FromMe:    msg.Info.IsFromMe,
-		IsGroup:   msg.Info.IsGroup,
-		PushName:  msg.Info.PushName,
+	senderJID := msg.Info.Sender.String()
+	resolvedPhone := ""
+
+	// Attempt to resolve LID to phone number
+	if strings.HasSuffix(senderJID, "@lid") {
+		log.Info().Str("lid", senderJID).Msg("Processing message from LID contact - starting resolution")
+
+		inst, ok := m.GetInstance(instanceID)
+		if ok && inst.Client != nil && inst.Client.Store != nil {
+			// 1. Try LIDs table
+			if inst.Client.Store.LIDs != nil {
+				lidJID := msg.Info.Sender
+				pnJID, err := inst.Client.Store.LIDs.GetPNForLID(context.Background(), lidJID)
+				if err == nil && pnJID.User != "" {
+					resolvedPhone = pnJID.User
+					log.Info().Str("lid", senderJID).Str("resolvedPhone", resolvedPhone).Msg("✅ Resolved LID via Store.LIDs")
+				} else {
+					log.Info().Str("lid", senderJID).Err(err).Msg("❌ Failed to resolve via Store.LIDs")
+				}
+			}
+
+			// 2. If failed, try Contacts table (sometimes they are linked there)
+			if resolvedPhone == "" && inst.Client.Store.Contacts != nil {
+				contact, err := inst.Client.Store.Contacts.GetContact(context.Background(), msg.Info.Sender)
+				if err == nil {
+					log.Info().
+						Str("lid", senderJID).
+						Str("foundName", contact.FullName).
+						Str("foundPushName", contact.PushName).
+						Msg("ℹ️ Found contact in Store.Contacts")
+				}
+			}
+
+			// 3. Fallback: GetUserInfo (at least get the name)
+			if resolvedPhone == "" {
+				users, err := inst.Client.GetUserInfo(context.Background(), []types.JID{msg.Info.Sender})
+				if err == nil {
+					if user, ok := users[msg.Info.Sender]; ok {
+						vName := ""
+						if user.VerifiedName != nil {
+							vName = "present"
+						}
+						log.Info().
+							Str("lid", senderJID).
+							Str("verifiedName", vName).
+							Str("status", user.Status).
+							Str("pictureID", user.PictureID). // Available in UserInfo
+							Msg("ℹ️ GetUserInfo result for LID")
+					}
+				}
+			}
+		}
 	}
+
+	return MessageData{
+		ID:            msg.Info.ID,
+		From:          senderJID,
+		To:            msg.Info.Chat.String(),
+		Body:          body,
+		Type:          "text",
+		Timestamp:     msg.Info.Timestamp.Unix(),
+		FromMe:        msg.Info.IsFromMe,
+		IsGroup:       msg.Info.IsGroup,
+		PushName:      msg.Info.PushName,
+		ResolvedPhone: resolvedPhone,
+	}
+}
+
+// GetContactInfo attempts to get contact information and resolve LID if applicable
+func (m *Manager) GetContactInfo(instanceID, jidStr string) (*ResolvedContactInfo, error) {
+	inst, ok := m.GetInstance(instanceID)
+	if !ok {
+		return nil, fmt.Errorf("instance not found")
+	}
+
+	inst.mu.RLock()
+	status := inst.Status
+	client := inst.Client
+	inst.mu.RUnlock()
+
+	if status != "connected" || client == nil {
+		return nil, fmt.Errorf("instance not connected")
+	}
+
+	// Parse JID
+	jid, err := types.ParseJID(jidStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid JID: %w", err)
+	}
+
+	result := &ResolvedContactInfo{
+		OriginalJID: jidStr,
+		IsLID:       strings.HasSuffix(jidStr, "@lid"),
+		Resolved:    false,
+	}
+
+	// Try to get contact info from store
+	if client.Store != nil && client.Store.Contacts != nil {
+		contact, err := client.Store.Contacts.GetContact(context.Background(), jid)
+		if err == nil {
+			result.FullName = contact.FullName
+			result.PushName = contact.PushName
+		}
+	}
+
+	// If it's a LID, try to resolve to phone number
+	if result.IsLID && client.Store != nil && client.Store.LIDs != nil {
+		pnJID, err := client.Store.LIDs.GetPNForLID(context.Background(), jid)
+		if err == nil && pnJID.User != "" {
+			result.ResolvedPhone = pnJID.User
+			result.Resolved = true
+			log.Info().Str("lid", jidStr).Str("phone", result.ResolvedPhone).Msg("Successfully resolved LID to phone")
+		} else {
+			log.Debug().Str("lid", jidStr).Msg("Could not resolve LID - WhatsApp privacy restriction")
+		}
+	} else if !result.IsLID {
+		// For regular JIDs, extract phone number directly
+		result.ResolvedPhone = jid.User
+		result.Resolved = true
+	}
+
+	return result, nil
 }
 
 // Connect connects an instance to WhatsApp

@@ -671,6 +671,36 @@ class WhatsAppBridge extends EventEmitter {
         });
     }
 
+    /**
+     * Resolve contact info, attempting to resolve LID to phone number
+     * @param instanceId - Instance ID
+     * @param jid - JID to resolve (can be @s.whatsapp.net or @lid format)
+     * @returns Resolved contact information including phone number if available
+     */
+    async resolveContact(instanceId: string, jid: string): Promise<{
+        originalJid: string;
+        resolvedPhone?: string;
+        pushName?: string;
+        fullName?: string;
+        isLid: boolean;
+        resolved: boolean;
+    }> {
+        logger.info({ instanceId, jid }, 'Resolving contact info');
+
+        const data = await this.request<{
+            originalJid: string;
+            resolvedPhone?: string;
+            pushName?: string;
+            fullName?: string;
+            isLid: boolean;
+            resolved: boolean;
+        }>(`/contacts/${instanceId}/resolve/${encodeURIComponent(jid)}`, {
+            method: 'GET',
+        });
+
+        return data;
+    }
+
     async downloadMedia(_i: string, _m: string, _o?: object) { throw new Error('Not implemented'); }
     async getContacts(_i: string) { return []; }
     async getContactById(_i: string, _c: string) { throw new Error('Not implemented'); }
