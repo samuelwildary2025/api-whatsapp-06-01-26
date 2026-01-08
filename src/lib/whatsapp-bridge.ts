@@ -344,7 +344,7 @@ class WhatsAppBridge extends EventEmitter {
             const instances = await prisma.instance.findMany({
                 where: {
                     status: {
-                        in: ['connected', 'connecting', 'qr']
+                        in: ['CONNECTED', 'CONNECTING', 'QR']
                     }
                 },
                 select: {
@@ -359,10 +359,18 @@ class WhatsAppBridge extends EventEmitter {
             // Connect WebSocket for each instance to receive events
             for (const instance of instances) {
                 try {
+                    // Map Prisma status (uppercase) to local status (lowercase)
+                    const statusMap: Record<string, 'connected' | 'connecting' | 'disconnected' | 'qr'> = {
+                        'CONNECTED': 'connected',
+                        'CONNECTING': 'connecting',
+                        'DISCONNECTED': 'disconnected',
+                        'QR': 'qr',
+                    };
+
                     // Add to local tracking
                     this.instances.set(instance.id, {
                         id: instance.id,
-                        status: instance.status as 'connected' | 'connecting' | 'disconnected' | 'qr',
+                        status: statusMap[instance.status] || 'disconnected',
                     });
 
                     // Connect WebSocket to receive events
