@@ -111,7 +111,7 @@ instance.post('/:id/connect', authMiddleware, async (c) => {
             proxyPort: instanceData.proxyPort,
             proxyUsername: instanceData.proxyUsername || undefined,
             proxyPassword: instanceData.proxyPassword || undefined,
-            proxyProtocol: instanceData.proxyProtocol || 'socks5',
+            proxyProtocol: instanceData.proxyProtocol || 'http',
         } : undefined;
 
         const waInstance = await waManager.connect(id, proxy);
@@ -725,7 +725,7 @@ instance.patch('/:id/proxy', authMiddleware, async (c) => {
             proxyPort: data.proxyPort || '',
             proxyUsername: data.proxyUsername || '',
             proxyPassword: data.proxyPassword || '',
-            proxyProtocol: data.proxyProtocol || 'socks5',
+            proxyProtocol: data.proxyProtocol || 'http',
         });
 
         return c.json({
