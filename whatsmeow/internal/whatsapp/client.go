@@ -3,10 +3,13 @@ package whatsapp
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/url"
+	"os"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -21,9 +24,6 @@ import (
 	"go.mau.fi/whatsmeow/types/events"
 	waLog "go.mau.fi/whatsmeow/util/log"
 	"google.golang.org/protobuf/proto"
-
-	"encoding/json"
-	"os"
 
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -907,7 +907,147 @@ func (m *Manager) GetQRCode(instanceID string) (string, string) {
 	return inst.QRCode, inst.QRCodeBase64
 }
 
-// SendTextMessage sends a text message
+// LinkPreview holds Open Graph metadata for a URL
+type LinkPreview struct {
+	URL         string
+	Title       string
+	Description string
+	SiteName    string
+	ImageURL    string
+	Thumbnail   []byte
+}
+
+// urlRegex matches http/https URLs
+var urlRegex = regexp.MustCompile(`https?://[^\s<>"']+`)
+
+// extractFirstURL finds the first URL in text
+func extractFirstURL(text string) string {
+	match := urlRegex.FindString(text)
+	return match
+}
+
+// fetchLinkPreview fetches Open Graph metadata from a URL
+func fetchLinkPreview(targetURL string) (*LinkPreview, error) {
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", targetURL, nil)
+	if err != nil {
+		return nil, err
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0 (compatible; WhatsApp/2.23; +http://www.whatsapp.com)")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil, fmt.Errorf("status %d", resp.StatusCode)
+	}
+
+	// Read body (limit to 1MB)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 1024*1024))
+	if err != nil {
+		return nil, err
+	}
+
+	htmlStr := string(body)
+
+	preview := &LinkPreview{
+		URL: targetURL,
+	}
+
+	// Extract Open Graph tags
+	preview.Title = extractMetaContent(htmlStr, "og:title")
+	if preview.Title == "" {
+		preview.Title = extractHTMLTitle(htmlStr)
+	}
+	preview.Description = extractMetaContent(htmlStr, "og:description")
+	if preview.Description == "" {
+		preview.Description = extractMetaContent(htmlStr, "description")
+	}
+	preview.SiteName = extractMetaContent(htmlStr, "og:site_name")
+	preview.ImageURL = extractMetaContent(htmlStr, "og:image")
+
+	// Make image URL absolute if relative
+	if preview.ImageURL != "" && !strings.HasPrefix(preview.ImageURL, "http") {
+		baseURL, _ := url.Parse(targetURL)
+		imgURL, _ := url.Parse(preview.ImageURL)
+		preview.ImageURL = baseURL.ResolveReference(imgURL).String()
+	}
+
+	// Download thumbnail if available
+	if preview.ImageURL != "" {
+		preview.Thumbnail = downloadThumbnail(preview.ImageURL)
+	}
+
+	return preview, nil
+}
+
+// extractMetaContent extracts content from <meta property="name" content="value"> or <meta name="name" content="value">
+func extractMetaContent(html, name string) string {
+	// Try property="name"
+	pattern := regexp.MustCompile(`<meta[^>]+(?:property|name)=["']` + regexp.QuoteMeta(name) + `["'][^>]+content=["']([^"']*)["']`)
+	match := pattern.FindStringSubmatch(html)
+	if len(match) > 1 {
+		return match[1]
+	}
+
+	// Try content first
+	pattern2 := regexp.MustCompile(`<meta[^>]+content=["']([^"']*)["'][^>]+(?:property|name)=["']` + regexp.QuoteMeta(name) + `["']`)
+	match2 := pattern2.FindStringSubmatch(html)
+	if len(match2) > 1 {
+		return match2[1]
+	}
+
+	return ""
+}
+
+// extractHTMLTitle extracts <title> content
+func extractHTMLTitle(html string) string {
+	pattern := regexp.MustCompile(`<title[^>]*>([^<]*)</title>`)
+	match := pattern.FindStringSubmatch(html)
+	if len(match) > 1 {
+		return strings.TrimSpace(match[1])
+	}
+	return ""
+}
+
+// downloadThumbnail downloads and returns image bytes (limited size)
+func downloadThumbnail(imageURL string) []byte {
+	client := &http.Client{
+		Timeout: 5 * time.Second,
+	}
+
+	req, err := http.NewRequest("GET", imageURL, nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("User-Agent", "Mozilla/5.0")
+
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		return nil
+	}
+
+	// Limit to 500KB
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 500*1024))
+	if err != nil {
+		return nil
+	}
+
+	return data
+}
+
+// SendTextMessage sends a text message (with automatic link preview if URL detected)
 func (m *Manager) SendTextMessage(instanceID, to, text string) (string, error) {
 	inst, ok := m.GetInstance(instanceID)
 	if !ok {
@@ -946,9 +1086,50 @@ func (m *Manager) SendTextMessage(instanceID, to, text string) (string, error) {
 	// Use the correct JID returned by server
 	jid := users[0].JID
 
-	// Send message
-	msg := &waE2E.Message{
-		Conversation: proto.String(text),
+	// Build message - check for URLs to generate preview
+	var msg *waE2E.Message
+
+	foundURL := extractFirstURL(text)
+	if foundURL != "" {
+		log.Debug().Str("instanceId", instanceID).Str("url", foundURL).Msg("URL detected, fetching link preview")
+
+		// Try to fetch link preview (don't fail if it doesn't work)
+		preview, err := fetchLinkPreview(foundURL)
+		if err != nil {
+			log.Warn().Err(err).Str("url", foundURL).Msg("Failed to fetch link preview, sending as plain text")
+			// Fall back to plain text
+			msg = &waE2E.Message{
+				Conversation: proto.String(text),
+			}
+		} else {
+			log.Info().Str("instanceId", instanceID).Str("title", preview.Title).Str("url", foundURL).Msg("Link preview fetched successfully")
+
+			// Build ExtendedTextMessage with preview
+			extMsg := &waE2E.ExtendedTextMessage{
+				Text:        proto.String(text),
+				MatchedText: proto.String(foundURL),
+				PreviewType: waE2E.ExtendedTextMessage_VIDEO.Enum(), // Use VIDEO type for rich preview
+			}
+
+			if preview.Title != "" {
+				extMsg.Title = proto.String(preview.Title)
+			}
+			if preview.Description != "" {
+				extMsg.Description = proto.String(preview.Description)
+			}
+			if len(preview.Thumbnail) > 0 {
+				extMsg.JPEGThumbnail = preview.Thumbnail
+			}
+
+			msg = &waE2E.Message{
+				ExtendedTextMessage: extMsg,
+			}
+		}
+	} else {
+		// No URL, send as plain conversation
+		msg = &waE2E.Message{
+			Conversation: proto.String(text),
+		}
 	}
 
 	log.Debug().Str("instanceId", instanceID).Str("jid", jid.String()).Msg("Attempting to send message via whatsmeow")
