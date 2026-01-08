@@ -331,11 +331,53 @@ class WhatsAppBridge extends EventEmitter {
 
     /**
      * Reconnect all instances from database
+     * This restores WebSocket connections to receive events after API restart
      */
     async reconnectAll(): Promise<void> {
-        // This will be called at startup to reconnect saved sessions
-        // The whatsmeow service handles session persistence
-        logger.info('Reconnect all called - whatsmeow handles session persistence');
+        logger.info('Reconnecting to all active instances...');
+
+        try {
+            // Import prisma dynamically to avoid circular dependencies
+            const { prisma } = await import('./prisma.js');
+
+            // Get all instances from database that are connected or were recently active
+            const instances = await prisma.instance.findMany({
+                where: {
+                    status: {
+                        in: ['connected', 'connecting', 'qr']
+                    }
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    status: true,
+                }
+            });
+
+            logger.info({ count: instances.length }, 'Found instances to reconnect');
+
+            // Connect WebSocket for each instance to receive events
+            for (const instance of instances) {
+                try {
+                    // Add to local tracking
+                    this.instances.set(instance.id, {
+                        id: instance.id,
+                        status: instance.status as 'connected' | 'connecting' | 'disconnected' | 'qr',
+                    });
+
+                    // Connect WebSocket to receive events
+                    this.connectWebSocket(instance.id);
+
+                    logger.info({ instanceId: instance.id, name: instance.name }, 'Reconnected WebSocket for instance');
+                } catch (err) {
+                    logger.error({ instanceId: instance.id, err }, 'Failed to reconnect instance');
+                }
+            }
+
+            logger.info({ count: instances.length }, 'Reconnection complete');
+        } catch (err) {
+            logger.error({ err }, 'Failed to reconnect instances');
+        }
     }
 
     /**
