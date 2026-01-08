@@ -344,7 +344,7 @@ class WhatsAppBridge extends EventEmitter {
             const instances = await prisma.instance.findMany({
                 where: {
                     status: {
-                        in: ['CONNECTED', 'CONNECTING', 'QR']
+                        in: ['CONNECTED', 'CONNECTING']
                     }
                 },
                 select: {
