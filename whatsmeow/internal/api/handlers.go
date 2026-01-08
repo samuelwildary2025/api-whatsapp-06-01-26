@@ -62,7 +62,24 @@ func (h *Handlers) ConnectInstance(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	instanceID := vars["id"]
 
-	log.Info().Str("instanceId", instanceID).Msg("Connecting instance")
+	// Parse optional proxy configuration from request body
+	var req struct {
+		ProxyHost     string `json:"proxyHost,omitempty"`
+		ProxyPort     string `json:"proxyPort,omitempty"`
+		ProxyUsername string `json:"proxyUsername,omitempty"`
+		ProxyPassword string `json:"proxyPassword,omitempty"`
+		ProxyProtocol string `json:"proxyProtocol,omitempty"`
+	}
+	// Decode body if present (ignore errors for backward compatibility)
+	json.NewDecoder(r.Body).Decode(&req)
+
+	log.Info().Str("instanceId", instanceID).Str("proxyHost", req.ProxyHost).Msg("Connecting instance")
+
+	// Apply proxy configuration before connecting if provided
+	if req.ProxyHost != "" && req.ProxyPort != "" {
+		log.Info().Str("instanceId", instanceID).Str("proxy", req.ProxyHost+":"+req.ProxyPort).Msg("Applying proxy before connect")
+		h.manager.SetProxy(instanceID, req.ProxyHost, req.ProxyPort, req.ProxyUsername, req.ProxyPassword, req.ProxyProtocol)
+	}
 
 	instance, err := h.manager.Connect(instanceID)
 	if err != nil {

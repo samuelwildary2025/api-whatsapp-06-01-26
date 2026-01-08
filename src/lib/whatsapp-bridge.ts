@@ -202,11 +202,12 @@ class WhatsAppBridge extends EventEmitter {
     /**
      * Connect instance to WhatsApp
      */
-    async connect(instanceId: string): Promise<WAInstance> {
-        logger.info({ instanceId }, 'Connecting instance');
+    async connect(instanceId: string, proxy?: { proxyHost?: string; proxyPort?: string; proxyUsername?: string; proxyPassword?: string; proxyProtocol?: string }): Promise<WAInstance> {
+        logger.info({ instanceId, hasProxy: !!proxy?.proxyHost }, 'Connecting instance');
 
         const data = await this.request<Record<string, unknown>>(`/instance/${instanceId}/connect`, {
             method: 'POST',
+            body: JSON.stringify(proxy || {}),
         });
 
         const instance: WAInstance = {

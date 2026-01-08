@@ -84,11 +84,19 @@ instance.post('/:id/connect', authMiddleware, async (c) => {
     const { id } = c.req.param();
     const user = c.get('user');
 
-    // Check instance exists and belongs to user
+    // Check instance exists and belongs to user - also fetch proxy config
     const instanceData = await prisma.instance.findFirst({
         where: {
             id,
             OR: [{ userId: user.userId }, { user: { role: 'ADMIN' } }],
+        },
+        select: {
+            id: true,
+            proxyHost: true,
+            proxyPort: true,
+            proxyUsername: true,
+            proxyPassword: true,
+            proxyProtocol: true,
         },
     });
 
@@ -97,13 +105,23 @@ instance.post('/:id/connect', authMiddleware, async (c) => {
     }
 
     try {
-        const waInstance = await waManager.connect(id);
+        // Build proxy config if set in database
+        const proxy = instanceData.proxyHost && instanceData.proxyPort ? {
+            proxyHost: instanceData.proxyHost,
+            proxyPort: instanceData.proxyPort,
+            proxyUsername: instanceData.proxyUsername || undefined,
+            proxyPassword: instanceData.proxyPassword || undefined,
+            proxyProtocol: instanceData.proxyProtocol || 'socks5',
+        } : undefined;
+
+        const waInstance = await waManager.connect(id, proxy);
 
         return c.json({
             success: true,
             data: {
                 status: waInstance.status,
                 qrCode: waInstance.qrCodeBase64,
+                usingProxy: !!proxy,
                 message: waInstance.status === 'connected'
                     ? 'Already connected'
                     : 'Scan the QR code with WhatsApp',

@@ -49,7 +49,7 @@ const useWhatsmeow = process.env.USE_WHATSMEOW === 'true';
 export interface IWhatsAppManager extends EventEmitter {
     // Instance Management
     createInstance(instanceId: string): Promise<any>;
-    connect(instanceId: string): Promise<any>;
+    connect(instanceId: string, proxy?: { proxyHost?: string; proxyPort?: string; proxyUsername?: string; proxyPassword?: string; proxyProtocol?: string }): Promise<any>;
     connectWithPairingCode(instanceId: string, phoneNumber: string): Promise<{ pairingCode: string }>;
     disconnect(instanceId: string): Promise<void>;
     logout(instanceId: string): Promise<void>;
