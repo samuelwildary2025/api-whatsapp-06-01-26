@@ -255,7 +255,7 @@ instance.get('/:id/status', async (c) => {
             name: instanceData.name,
             waName: instanceData.waName,
             waNumber: instanceData.waNumber,
-            profilePictureUrl: instanceData.profilePictureUrl,
+            profilePictureUrl: instanceData.waPicture,
         }
     });
 });
