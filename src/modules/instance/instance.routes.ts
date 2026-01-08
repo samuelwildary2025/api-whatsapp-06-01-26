@@ -228,6 +228,17 @@ instance.post('/:id/logout', authMiddleware, async (c) => {
 });
 
 /**
+ * GET /debug/instances
+ * List all instance IDs for debugging
+ */
+instance.get('/debug-list', async (c) => {
+    const instances = await prisma.instance.findMany({
+        select: { id: true, name: true, status: true }
+    });
+    return c.json({ success: true, count: instances.length, instances });
+});
+
+/**
  * GET /instance/:id/status
  * Get instance status
  */
