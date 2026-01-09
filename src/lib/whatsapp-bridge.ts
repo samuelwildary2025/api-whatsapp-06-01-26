@@ -724,7 +724,7 @@ class WhatsAppBridge extends EventEmitter {
         return data;
     }
 
-    async downloadMedia(instanceId: string, messageId: string, options?: {
+    async downloadMedia(instanceId: string, _messageId: string, options?: {
         url?: string;
         directPath?: string;
         mediaKey?: string;
