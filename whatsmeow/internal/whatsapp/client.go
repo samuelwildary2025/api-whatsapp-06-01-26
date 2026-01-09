@@ -2240,16 +2240,53 @@ func (m *Manager) DownloadMedia(instanceID string, mediaInfo DownloadMediaReques
 		Uint64("fileLength", mediaInfo.FileLength).
 		Msg("Downloading media")
 
-	// Download using whatsmeow
-	data, err := client.Download(&waE2E.ImageMessage{
-		URL:           proto.String(mediaInfo.URL),
-		DirectPath:    proto.String(mediaInfo.DirectPath),
-		MediaKey:      mediaInfo.MediaKey,
-		FileEncSHA256: mediaInfo.FileEncSHA256,
-		FileSHA256:    mediaInfo.FileSHA256,
-		FileLength:    proto.Uint64(mediaInfo.FileLength),
-		Mimetype:      proto.String(mediaInfo.Mimetype),
-	}, mediaType)
+	// Download using whatsmeow - the Download method accepts a DownloadableMessage
+	// We create the appropriate message type based on what we're downloading
+	var data []byte
+	var err error
+
+	switch mediaType {
+	case whatsmeow.MediaImage:
+		data, err = client.Download(&waE2E.ImageMessage{
+			URL:           proto.String(mediaInfo.URL),
+			DirectPath:    proto.String(mediaInfo.DirectPath),
+			MediaKey:      mediaInfo.MediaKey,
+			FileEncSHA256: mediaInfo.FileEncSHA256,
+			FileSHA256:    mediaInfo.FileSHA256,
+			FileLength:    proto.Uint64(mediaInfo.FileLength),
+			Mimetype:      proto.String(mediaInfo.Mimetype),
+		})
+	case whatsmeow.MediaVideo:
+		data, err = client.Download(&waE2E.VideoMessage{
+			URL:           proto.String(mediaInfo.URL),
+			DirectPath:    proto.String(mediaInfo.DirectPath),
+			MediaKey:      mediaInfo.MediaKey,
+			FileEncSHA256: mediaInfo.FileEncSHA256,
+			FileSHA256:    mediaInfo.FileSHA256,
+			FileLength:    proto.Uint64(mediaInfo.FileLength),
+			Mimetype:      proto.String(mediaInfo.Mimetype),
+		})
+	case whatsmeow.MediaAudio:
+		data, err = client.Download(&waE2E.AudioMessage{
+			URL:           proto.String(mediaInfo.URL),
+			DirectPath:    proto.String(mediaInfo.DirectPath),
+			MediaKey:      mediaInfo.MediaKey,
+			FileEncSHA256: mediaInfo.FileEncSHA256,
+			FileSHA256:    mediaInfo.FileSHA256,
+			FileLength:    proto.Uint64(mediaInfo.FileLength),
+			Mimetype:      proto.String(mediaInfo.Mimetype),
+		})
+	default: // MediaDocument
+		data, err = client.Download(&waE2E.DocumentMessage{
+			URL:           proto.String(mediaInfo.URL),
+			DirectPath:    proto.String(mediaInfo.DirectPath),
+			MediaKey:      mediaInfo.MediaKey,
+			FileEncSHA256: mediaInfo.FileEncSHA256,
+			FileSHA256:    mediaInfo.FileSHA256,
+			FileLength:    proto.Uint64(mediaInfo.FileLength),
+			Mimetype:      proto.String(mediaInfo.Mimetype),
+		})
+	}
 
 	if err != nil {
 		log.Error().Err(err).Str("instanceId", instanceID).Msg("Failed to download media")
