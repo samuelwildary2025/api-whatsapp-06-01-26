@@ -724,7 +724,39 @@ class WhatsAppBridge extends EventEmitter {
         return data;
     }
 
-    async downloadMedia(_i: string, _m: string, _o?: object) { throw new Error('Not implemented'); }
+    async downloadMedia(instanceId: string, messageId: string, options?: {
+        url?: string;
+        directPath?: string;
+        mediaKey?: string;
+        fileEncSha256?: string;
+        fileSha256?: string;
+        fileLength?: number;
+        mediaType?: string;
+        mimetype?: string;
+        returnBase64?: boolean;
+    }): Promise<{ data: string; mimetype: string; size: number }> {
+        // If we have media info, forward to Go service
+        if (options?.mediaKey && (options?.url || options?.directPath)) {
+            const response = await this.request<{ data: string; mimetype: string; size: number }>('/message/download', {
+                method: 'POST',
+                body: JSON.stringify({
+                    instanceId,
+                    url: options.url || '',
+                    directPath: options.directPath || '',
+                    mediaKey: options.mediaKey,
+                    fileEncSha256: options.fileEncSha256 || '',
+                    fileSha256: options.fileSha256 || '',
+                    fileLength: options.fileLength || 0,
+                    mediaType: options.mediaType || 'document',
+                    mimetype: options.mimetype || 'application/octet-stream',
+                }),
+            });
+            return response;
+        }
+
+        // Without media info, we can't download
+        throw new Error('Media download requires mediaKey and url/directPath. These should be provided from the webhook message data.');
+    }
     async getContacts(_i: string) { return []; }
     async getContactById(_i: string, _c: string) { throw new Error('Not implemented'); }
     async isRegisteredUser(_i: string, _n: string): Promise<boolean> { return true; }
