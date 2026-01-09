@@ -2178,3 +2178,88 @@ func (m *Manager) GetProxy(instanceID string) map[string]string {
 		"proxyProtocol": inst.ProxyProtocol,
 	}
 }
+
+// DownloadMediaRequest contains the info needed to download media
+type DownloadMediaRequest struct {
+	URL           string `json:"url"`
+	DirectPath    string `json:"directPath"`
+	MediaKey      []byte `json:"mediaKey"`
+	FileEncSHA256 []byte `json:"fileEncSha256"`
+	FileSHA256    []byte `json:"fileSha256"`
+	FileLength    uint64 `json:"fileLength"`
+	MediaType     string `json:"mediaType"` // image, video, audio, document
+	Mimetype      string `json:"mimetype"`
+}
+
+// DownloadMedia downloads media from a WhatsApp message
+func (m *Manager) DownloadMedia(instanceID string, mediaInfo DownloadMediaRequest) ([]byte, string, error) {
+	inst, ok := m.GetInstance(instanceID)
+	if !ok {
+		return nil, "", fmt.Errorf("instance not found")
+	}
+
+	inst.mu.RLock()
+	status := inst.Status
+	client := inst.Client
+	inst.mu.RUnlock()
+
+	if status != "connected" || client == nil {
+		return nil, "", fmt.Errorf("instance not connected")
+	}
+
+	// Determine media type for whatsmeow
+	var mediaType whatsmeow.MediaType
+	switch mediaInfo.MediaType {
+	case "image":
+		mediaType = whatsmeow.MediaImage
+	case "video":
+		mediaType = whatsmeow.MediaVideo
+	case "audio":
+		mediaType = whatsmeow.MediaAudio
+	case "document":
+		mediaType = whatsmeow.MediaDocument
+	case "sticker":
+		mediaType = whatsmeow.MediaImage // Stickers are images
+	default:
+		// Try to infer from mimetype
+		if strings.HasPrefix(mediaInfo.Mimetype, "image/") {
+			mediaType = whatsmeow.MediaImage
+		} else if strings.HasPrefix(mediaInfo.Mimetype, "video/") {
+			mediaType = whatsmeow.MediaVideo
+		} else if strings.HasPrefix(mediaInfo.Mimetype, "audio/") {
+			mediaType = whatsmeow.MediaAudio
+		} else {
+			mediaType = whatsmeow.MediaDocument
+		}
+	}
+
+	log.Info().
+		Str("instanceId", instanceID).
+		Str("mediaType", mediaInfo.MediaType).
+		Str("mimetype", mediaInfo.Mimetype).
+		Uint64("fileLength", mediaInfo.FileLength).
+		Msg("Downloading media")
+
+	// Download using whatsmeow
+	data, err := client.Download(&waE2E.ImageMessage{
+		URL:           proto.String(mediaInfo.URL),
+		DirectPath:    proto.String(mediaInfo.DirectPath),
+		MediaKey:      mediaInfo.MediaKey,
+		FileEncSHA256: mediaInfo.FileEncSHA256,
+		FileSHA256:    mediaInfo.FileSHA256,
+		FileLength:    proto.Uint64(mediaInfo.FileLength),
+		Mimetype:      proto.String(mediaInfo.Mimetype),
+	}, mediaType)
+
+	if err != nil {
+		log.Error().Err(err).Str("instanceId", instanceID).Msg("Failed to download media")
+		return nil, "", fmt.Errorf("failed to download media: %w", err)
+	}
+
+	log.Info().
+		Str("instanceId", instanceID).
+		Int("bytes", len(data)).
+		Msg("Media downloaded successfully")
+
+	return data, mediaInfo.Mimetype, nil
+}

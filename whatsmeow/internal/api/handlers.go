@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -911,6 +912,88 @@ func (h *Handlers) GetContactInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	successResponse(w, contactInfo)
+}
+
+// ============================================
+// Media Download Handler
+// ============================================
+
+// DownloadMediaRequest represents the request to download media
+type DownloadMediaRequest struct {
+	InstanceID    string `json:"instanceId"`
+	URL           string `json:"url"`
+	DirectPath    string `json:"directPath"`
+	MediaKey      string `json:"mediaKey"`      // base64 encoded
+	FileEncSHA256 string `json:"fileEncSha256"` // base64 encoded
+	FileSHA256    string `json:"fileSha256"`    // base64 encoded
+	FileLength    uint64 `json:"fileLength"`
+	MediaType     string `json:"mediaType"` // image, video, audio, document, sticker
+	Mimetype      string `json:"mimetype"`
+}
+
+// DownloadMedia downloads media from a WhatsApp message
+func (h *Handlers) DownloadMedia(w http.ResponseWriter, r *http.Request) {
+	var req DownloadMediaRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		errorResponse(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	if req.InstanceID == "" {
+		errorResponse(w, http.StatusBadRequest, "instanceId is required")
+		return
+	}
+
+	if req.URL == "" && req.DirectPath == "" {
+		errorResponse(w, http.StatusBadRequest, "url or directPath is required")
+		return
+	}
+
+	// Decode base64 fields
+	mediaKey, err := base64.StdEncoding.DecodeString(req.MediaKey)
+	if err != nil {
+		errorResponse(w, http.StatusBadRequest, "Invalid mediaKey (must be base64)")
+		return
+	}
+
+	fileEncSHA256, _ := base64.StdEncoding.DecodeString(req.FileEncSHA256)
+	fileSHA256, _ := base64.StdEncoding.DecodeString(req.FileSHA256)
+
+	log.Info().
+		Str("instanceId", req.InstanceID).
+		Str("mediaType", req.MediaType).
+		Str("mimetype", req.Mimetype).
+		Uint64("fileLength", req.FileLength).
+		Msg("Downloading media")
+
+	// Build the media info struct
+	mediaInfo := whatsapp.DownloadMediaRequest{
+		URL:           req.URL,
+		DirectPath:    req.DirectPath,
+		MediaKey:      mediaKey,
+		FileEncSHA256: fileEncSHA256,
+		FileSHA256:    fileSHA256,
+		FileLength:    req.FileLength,
+		MediaType:     req.MediaType,
+		Mimetype:      req.Mimetype,
+	}
+
+	// Download the media
+	data, mimetype, err := h.manager.DownloadMedia(req.InstanceID, mediaInfo)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to download media")
+		errorResponse(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	// Return as base64
+	base64Data := base64.StdEncoding.EncodeToString(data)
+
+	successResponse(w, map[string]interface{}{
+		"data":     base64Data,
+		"mimetype": mimetype,
+		"size":     len(data),
+	})
 }
 
 // ============================================

@@ -88,6 +88,7 @@ func main() {
 	router.HandleFunc("/message/react", handlers.ReactToMessage).Methods("POST")
 	router.HandleFunc("/message/read", handlers.MarkChatAsRead).Methods("POST")
 	router.HandleFunc("/message/delete", handlers.DeleteMessage).Methods("POST")
+	router.HandleFunc("/message/download", handlers.DownloadMedia).Methods("POST")
 
 	// Contact routes
 	router.HandleFunc("/contacts/{instanceId}", handlers.GetContacts).Methods("GET")
