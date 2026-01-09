@@ -2247,7 +2247,7 @@ func (m *Manager) DownloadMedia(instanceID string, mediaInfo DownloadMediaReques
 
 	switch mediaType {
 	case whatsmeow.MediaImage:
-		data, err = client.Download(&waE2E.ImageMessage{
+		data, err = client.Download(context.Background(), &waE2E.ImageMessage{
 			URL:           proto.String(mediaInfo.URL),
 			DirectPath:    proto.String(mediaInfo.DirectPath),
 			MediaKey:      mediaInfo.MediaKey,
@@ -2257,7 +2257,7 @@ func (m *Manager) DownloadMedia(instanceID string, mediaInfo DownloadMediaReques
 			Mimetype:      proto.String(mediaInfo.Mimetype),
 		})
 	case whatsmeow.MediaVideo:
-		data, err = client.Download(&waE2E.VideoMessage{
+		data, err = client.Download(context.Background(), &waE2E.VideoMessage{
 			URL:           proto.String(mediaInfo.URL),
 			DirectPath:    proto.String(mediaInfo.DirectPath),
 			MediaKey:      mediaInfo.MediaKey,
@@ -2267,7 +2267,7 @@ func (m *Manager) DownloadMedia(instanceID string, mediaInfo DownloadMediaReques
 			Mimetype:      proto.String(mediaInfo.Mimetype),
 		})
 	case whatsmeow.MediaAudio:
-		data, err = client.Download(&waE2E.AudioMessage{
+		data, err = client.Download(context.Background(), &waE2E.AudioMessage{
 			URL:           proto.String(mediaInfo.URL),
 			DirectPath:    proto.String(mediaInfo.DirectPath),
 			MediaKey:      mediaInfo.MediaKey,
@@ -2277,7 +2277,7 @@ func (m *Manager) DownloadMedia(instanceID string, mediaInfo DownloadMediaReques
 			Mimetype:      proto.String(mediaInfo.Mimetype),
 		})
 	default: // MediaDocument
-		data, err = client.Download(&waE2E.DocumentMessage{
+		data, err = client.Download(context.Background(), &waE2E.DocumentMessage{
 			URL:           proto.String(mediaInfo.URL),
 			DirectPath:    proto.String(mediaInfo.DirectPath),
 			MediaKey:      mediaInfo.MediaKey,
