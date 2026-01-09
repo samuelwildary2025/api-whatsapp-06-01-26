@@ -290,6 +290,117 @@ curl http://localhost:3000/sse/INSTANCE_ID \
 | POST | /message/react | Reagir a mensagem |
 | POST | /message/delete | Deletar mensagem |
 | POST | /message/search | Buscar mensagens |
+| POST | /message/download | Download de mídia |
+
+---
+
+## 📷 Recebendo Mídia (Imagem, Áudio, Vídeo, Documento)
+
+Quando você recebe uma mensagem de mídia via webhook, ela já vem com o conteúdo em **base64**:
+
+### Payload do Webhook com Mídia:
+```json
+{
+  "event": "message",
+  "instanceId": "sua-instancia-id",
+  "timestamp": 1736413125,
+  "data": {
+    "id": "3EB0B9A53DBA68DEE47918",
+    "from": "5511999999999@s.whatsapp.net",
+    "to": "5585999999999@s.whatsapp.net",
+    "type": "image",
+    "body": "legenda da imagem",
+    "timestamp": 1736413125,
+    "fromMe": false,
+    "isGroup": false,
+    "pushName": "João",
+    "mediaBase64": "data:image/jpeg;base64,/9j/4AAQSkZJRg...",
+    "mimetype": "image/jpeg",
+    "caption": "legenda da imagem",
+    "fileName": ""
+  }
+}
+```
+
+### Tipos de Mídia Suportados:
+
+| Tipo | `type` | `mimetype` (exemplos) |
+|------|--------|----------------------|
+| Imagem | `image` | `image/jpeg`, `image/png`, `image/webp` |
+| Vídeo | `video` | `video/mp4`, `video/3gpp` |
+| Áudio | `audio` | `audio/ogg; codecs=opus`, `audio/mpeg` |
+| Documento | `document` | `application/pdf`, `application/msword` |
+| Sticker | `sticker` | `image/webp` |
+
+### Exemplo em Python:
+```python
+import base64
+
+def handle_webhook(data):
+    if data.get('mediaBase64'):
+        # Decodificar base64
+        media_bytes = base64.b64decode(data['mediaBase64'])
+        mimetype = data.get('mimetype', 'application/octet-stream')
+        
+        # Salvar arquivo
+        extension = mimetype.split('/')[-1]
+        with open(f"media.{extension}", "wb") as f:
+            f.write(media_bytes)
+        
+        # Ou processar com IA
+        # response = openai.vision_preview(image=media_bytes)
+```
+
+### Exemplo em Node.js:
+```javascript
+function handleWebhook(data) {
+    if (data.mediaBase64) {
+        const buffer = Buffer.from(data.mediaBase64, 'base64');
+        const mimetype = data.mimetype || 'application/octet-stream';
+        
+        // Salvar arquivo
+        fs.writeFileSync(`media.${mimetype.split('/')[1]}`, buffer);
+    }
+}
+```
+
+---
+
+## 📥 Download de Mídia (Endpoint)
+
+Caso precise baixar mídia posteriormente (quando você tem os metadados da mensagem):
+
+#### Request:
+```bash
+curl -X POST http://localhost:3000/message/download \
+  -H "Content-Type: application/json" \
+  -H "X-Instance-Token: TOKEN_DA_INSTANCIA" \
+  -d '{
+    "instanceId": "sua-instancia-id",
+    "url": "https://mmg.whatsapp.net/...",
+    "directPath": "/v/t62.7114-24/...",
+    "mediaKey": "base64-da-chave...",
+    "fileEncSha256": "base64-do-hash...",
+    "fileSha256": "base64-do-hash...",
+    "fileLength": 12345,
+    "mediaType": "image",
+    "mimetype": "image/jpeg"
+  }'
+```
+
+#### Response:
+```json
+{
+  "success": true,
+  "data": {
+    "data": "base64-do-arquivo...",
+    "mimetype": "image/jpeg",
+    "size": 12345
+  }
+}
+```
+
+> **Nota:** Os campos `url`, `directPath`, `mediaKey`, etc. são fornecidos no evento de webhook original quando a mensagem é recebida.
 
 ### Contatos
 | Método | Endpoint | Descrição |
