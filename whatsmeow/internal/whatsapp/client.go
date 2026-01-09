@@ -104,6 +104,11 @@ type MessageData struct {
 	IsGroup       bool   `json:"isGroup"`
 	PushName      string `json:"pushName,omitempty"`
 	ResolvedPhone string `json:"resolvedPhone,omitempty"`
+	// Media fields
+	MediaBase64 string `json:"mediaBase64,omitempty"`
+	Mimetype    string `json:"mimetype,omitempty"`
+	Caption     string `json:"caption,omitempty"`
+	FileName    string `json:"fileName,omitempty"`
 }
 
 // ResolvedContactInfo represents resolved contact information
@@ -485,10 +490,92 @@ func (m *Manager) setupEventHandlers(inst *Instance) {
 // formatMessage formats a WhatsApp message event
 func (m *Manager) formatMessage(instanceID string, msg *events.Message) MessageData {
 	var body string
+	var msgType string = "text"
+	var mediaBase64 string
+	var mimetype string
+	var caption string
+	var fileName string
+
+	// Get instance for media download
+	inst, _ := m.GetInstance(instanceID)
+
+	// Check for different message types
 	if msg.Message.GetConversation() != "" {
 		body = msg.Message.GetConversation()
 	} else if msg.Message.GetExtendedTextMessage() != nil {
 		body = msg.Message.GetExtendedTextMessage().GetText()
+	} else if imgMsg := msg.Message.GetImageMessage(); imgMsg != nil {
+		msgType = "image"
+		caption = imgMsg.GetCaption()
+		mimetype = imgMsg.GetMimetype()
+		body = caption
+		// Download image
+		if inst != nil && inst.Client != nil {
+			data, err := inst.Client.Download(context.Background(), imgMsg)
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to download image")
+			} else {
+				mediaBase64 = base64.StdEncoding.EncodeToString(data)
+				log.Info().Str("instanceId", instanceID).Int("bytes", len(data)).Msg("Image downloaded successfully")
+			}
+		}
+	} else if vidMsg := msg.Message.GetVideoMessage(); vidMsg != nil {
+		msgType = "video"
+		caption = vidMsg.GetCaption()
+		mimetype = vidMsg.GetMimetype()
+		body = caption
+		// Download video
+		if inst != nil && inst.Client != nil {
+			data, err := inst.Client.Download(context.Background(), vidMsg)
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to download video")
+			} else {
+				mediaBase64 = base64.StdEncoding.EncodeToString(data)
+				log.Info().Str("instanceId", instanceID).Int("bytes", len(data)).Msg("Video downloaded successfully")
+			}
+		}
+	} else if audioMsg := msg.Message.GetAudioMessage(); audioMsg != nil {
+		msgType = "audio"
+		mimetype = audioMsg.GetMimetype()
+		// Download audio
+		if inst != nil && inst.Client != nil {
+			data, err := inst.Client.Download(context.Background(), audioMsg)
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to download audio")
+			} else {
+				mediaBase64 = base64.StdEncoding.EncodeToString(data)
+				log.Info().Str("instanceId", instanceID).Int("bytes", len(data)).Msg("Audio downloaded successfully")
+			}
+		}
+	} else if docMsg := msg.Message.GetDocumentMessage(); docMsg != nil {
+		msgType = "document"
+		caption = docMsg.GetCaption()
+		mimetype = docMsg.GetMimetype()
+		fileName = docMsg.GetFileName()
+		body = caption
+		// Download document
+		if inst != nil && inst.Client != nil {
+			data, err := inst.Client.Download(context.Background(), docMsg)
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to download document")
+			} else {
+				mediaBase64 = base64.StdEncoding.EncodeToString(data)
+				log.Info().Str("instanceId", instanceID).Int("bytes", len(data)).Msg("Document downloaded successfully")
+			}
+		}
+	} else if stickerMsg := msg.Message.GetStickerMessage(); stickerMsg != nil {
+		msgType = "sticker"
+		mimetype = stickerMsg.GetMimetype()
+		// Download sticker
+		if inst != nil && inst.Client != nil {
+			data, err := inst.Client.Download(context.Background(), stickerMsg)
+			if err != nil {
+				log.Warn().Err(err).Msg("Failed to download sticker")
+			} else {
+				mediaBase64 = base64.StdEncoding.EncodeToString(data)
+				log.Info().Str("instanceId", instanceID).Int("bytes", len(data)).Msg("Sticker downloaded successfully")
+			}
+		}
 	}
 
 	senderJID := msg.Info.Sender.String()
@@ -498,8 +585,7 @@ func (m *Manager) formatMessage(instanceID string, msg *events.Message) MessageD
 	if strings.HasSuffix(senderJID, "@lid") {
 		log.Info().Str("lid", senderJID).Msg("Processing message from LID contact - starting resolution")
 
-		inst, ok := m.GetInstance(instanceID)
-		if ok && inst.Client != nil && inst.Client.Store != nil {
+		if inst != nil && inst.Client != nil && inst.Client.Store != nil {
 			// 1. Try LIDs table
 			if inst.Client.Store.LIDs != nil {
 				lidJID := msg.Info.Sender
@@ -550,12 +636,16 @@ func (m *Manager) formatMessage(instanceID string, msg *events.Message) MessageD
 		From:          senderJID,
 		To:            msg.Info.Chat.String(),
 		Body:          body,
-		Type:          "text",
+		Type:          msgType,
 		Timestamp:     msg.Info.Timestamp.Unix(),
 		FromMe:        msg.Info.IsFromMe,
 		IsGroup:       msg.Info.IsGroup,
 		PushName:      msg.Info.PushName,
 		ResolvedPhone: resolvedPhone,
+		MediaBase64:   mediaBase64,
+		Mimetype:      mimetype,
+		Caption:       caption,
+		FileName:      fileName,
 	}
 }
 
