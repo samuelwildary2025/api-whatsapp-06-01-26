@@ -407,6 +407,7 @@ func (m *Manager) setupEventHandlers(inst *Instance) {
 
 		case *events.HistorySync:
 			// Process history sync to capture historical messages
+			// NOTE: We use formatMessageLite to avoid downloading media for historical messages
 			log.Info().Str("instanceId", inst.ID).Int("conversations", len(v.Data.GetConversations())).Msg("Received history sync")
 
 			for _, conv := range v.Data.GetConversations() {
@@ -424,7 +425,8 @@ func (m *Manager) setupEventHandlers(inst *Instance) {
 						continue
 					}
 
-					msgData := m.formatMessage(inst.ID, parsedMsg)
+					// Use formatMessageLite to avoid downloading media for historical messages
+					msgData := m.formatMessageLite(inst.ID, parsedMsg)
 					m.storeMessage(inst.ID, chatJID, msgData)
 				}
 			}
@@ -646,6 +648,62 @@ func (m *Manager) formatMessage(instanceID string, msg *events.Message) MessageD
 		Mimetype:      mimetype,
 		Caption:       caption,
 		FileName:      fileName,
+	}
+}
+
+// formatMessageLite formats a WhatsApp message WITHOUT downloading media
+// Used for historical messages to avoid memory issues
+func (m *Manager) formatMessageLite(instanceID string, msg *events.Message) MessageData {
+	var body string
+	var msgType string = "text"
+	var mimetype string
+	var caption string
+	var fileName string
+
+	// Check for different message types - but DON'T download media
+	if msg.Message.GetConversation() != "" {
+		body = msg.Message.GetConversation()
+	} else if msg.Message.GetExtendedTextMessage() != nil {
+		body = msg.Message.GetExtendedTextMessage().GetText()
+	} else if imgMsg := msg.Message.GetImageMessage(); imgMsg != nil {
+		msgType = "image"
+		caption = imgMsg.GetCaption()
+		mimetype = imgMsg.GetMimetype()
+		body = caption
+		// NO media download for history
+	} else if vidMsg := msg.Message.GetVideoMessage(); vidMsg != nil {
+		msgType = "video"
+		caption = vidMsg.GetCaption()
+		mimetype = vidMsg.GetMimetype()
+		body = caption
+	} else if audioMsg := msg.Message.GetAudioMessage(); audioMsg != nil {
+		msgType = "audio"
+		mimetype = audioMsg.GetMimetype()
+	} else if docMsg := msg.Message.GetDocumentMessage(); docMsg != nil {
+		msgType = "document"
+		caption = docMsg.GetCaption()
+		mimetype = docMsg.GetMimetype()
+		fileName = docMsg.GetFileName()
+		body = caption
+	} else if stickerMsg := msg.Message.GetStickerMessage(); stickerMsg != nil {
+		msgType = "sticker"
+		mimetype = stickerMsg.GetMimetype()
+	}
+
+	return MessageData{
+		ID:        msg.Info.ID,
+		From:      msg.Info.Sender.String(),
+		To:        msg.Info.Chat.String(),
+		Body:      body,
+		Type:      msgType,
+		Timestamp: msg.Info.Timestamp.Unix(),
+		FromMe:    msg.Info.IsFromMe,
+		IsGroup:   msg.Info.IsGroup,
+		PushName:  msg.Info.PushName,
+		Mimetype:  mimetype,
+		Caption:   caption,
+		FileName:  fileName,
+		// MediaBase64 is intentionally empty - no download for history
 	}
 }
 
