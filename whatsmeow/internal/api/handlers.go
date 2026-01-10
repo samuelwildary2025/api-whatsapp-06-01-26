@@ -210,10 +210,11 @@ func (h *Handlers) SetSettings(w http.ResponseWriter, r *http.Request) {
 	instanceID := vars["id"]
 
 	var req struct {
-		RejectCalls  *bool `json:"rejectCalls,omitempty"`
-		AlwaysOnline *bool `json:"alwaysOnline,omitempty"`
-		IgnoreGroups *bool `json:"ignoreGroups,omitempty"`
-		ReadMessages *bool `json:"readMessages,omitempty"`
+		RejectCalls       *bool `json:"rejectCalls,omitempty"`
+		AlwaysOnline      *bool `json:"alwaysOnline,omitempty"`
+		IgnoreGroups      *bool `json:"ignoreGroups,omitempty"`
+		ReadMessages      *bool `json:"readMessages,omitempty"`
+		SkipVideoDownload *bool `json:"skipVideoDownload,omitempty"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		errorResponse(w, http.StatusBadRequest, "Invalid request body")
@@ -231,6 +232,9 @@ func (h *Handlers) SetSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ReadMessages != nil {
 		h.manager.SetReadMessages(instanceID, *req.ReadMessages)
+	}
+	if req.SkipVideoDownload != nil {
+		h.manager.SetSkipVideoDownload(instanceID, *req.SkipVideoDownload)
 	}
 
 	successResponse(w, h.manager.GetSettings(instanceID))

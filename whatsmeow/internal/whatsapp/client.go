@@ -41,11 +41,12 @@ type Instance struct {
 	WAName       string
 
 	// Settings
-	RejectCalls  bool // Auto-reject incoming calls
-	AlwaysOnline bool // Keep presence as online 24h
-	IgnoreGroups bool // Don't process group messages
-	SyncHistory  bool // Request full history sync on connect
-	ReadMessages bool // Auto mark messages as read
+	RejectCalls       bool // Auto-reject incoming calls
+	AlwaysOnline      bool // Keep presence as online 24h
+	IgnoreGroups      bool // Don't process group messages
+	SyncHistory       bool // Request full history sync on connect
+	ReadMessages      bool // Auto mark messages as read
+	SkipVideoDownload bool // Skip automatic video download to save memory
 
 	// Proxy configuration
 	ProxyHost     string
@@ -489,6 +490,10 @@ func (m *Manager) setupEventHandlers(inst *Instance) {
 	})
 }
 
+// Maximum file size for automatic media download (5MB)
+// Larger files will not be downloaded automatically to save memory
+const maxAutoDownloadSize uint64 = 5 * 1024 * 1024 // 5MB
+
 // formatMessage formats a WhatsApp message event
 func (m *Manager) formatMessage(instanceID string, msg *events.Message) MessageData {
 	var body string
@@ -526,14 +531,22 @@ func (m *Manager) formatMessage(instanceID string, msg *events.Message) MessageD
 		caption = vidMsg.GetCaption()
 		mimetype = vidMsg.GetMimetype()
 		body = caption
-		// Download video
+		// Download video only if SkipVideoDownload is false
 		if inst != nil && inst.Client != nil {
-			data, err := inst.Client.Download(context.Background(), vidMsg)
-			if err != nil {
-				log.Warn().Err(err).Msg("Failed to download video")
+			inst.mu.RLock()
+			skipVideo := inst.SkipVideoDownload
+			inst.mu.RUnlock()
+
+			if skipVideo {
+				log.Info().Str("instanceId", instanceID).Uint64("bytes", vidMsg.GetFileLength()).Msg("Skipping video download (SkipVideoDownload enabled)")
 			} else {
-				mediaBase64 = base64.StdEncoding.EncodeToString(data)
-				log.Info().Str("instanceId", instanceID).Int("bytes", len(data)).Msg("Video downloaded successfully")
+				data, err := inst.Client.Download(context.Background(), vidMsg)
+				if err != nil {
+					log.Warn().Err(err).Msg("Failed to download video")
+				} else {
+					mediaBase64 = base64.StdEncoding.EncodeToString(data)
+					log.Info().Str("instanceId", instanceID).Int("bytes", len(data)).Msg("Video downloaded successfully")
+				}
 			}
 		}
 	} else if audioMsg := msg.Message.GetAudioMessage(); audioMsg != nil {
@@ -2179,6 +2192,18 @@ func (m *Manager) SetReadMessages(instanceID string, value bool) {
 	log.Info().Str("instanceId", instanceID).Bool("readMessages", value).Msg("Updated read messages setting")
 }
 
+// SetSkipVideoDownload sets the skip video download setting for an instance
+func (m *Manager) SetSkipVideoDownload(instanceID string, value bool) {
+	inst, ok := m.GetInstance(instanceID)
+	if !ok {
+		return
+	}
+	inst.mu.Lock()
+	inst.SkipVideoDownload = value
+	inst.mu.Unlock()
+	log.Info().Str("instanceId", instanceID).Bool("skipVideoDownload", value).Msg("Updated skip video download setting")
+}
+
 // GetSettings returns the current settings for an instance
 func (m *Manager) GetSettings(instanceID string) map[string]bool {
 	inst, ok := m.GetInstance(instanceID)
@@ -2188,10 +2213,11 @@ func (m *Manager) GetSettings(instanceID string) map[string]bool {
 	inst.mu.RLock()
 	defer inst.mu.RUnlock()
 	return map[string]bool{
-		"rejectCalls":  inst.RejectCalls,
-		"alwaysOnline": inst.AlwaysOnline,
-		"ignoreGroups": inst.IgnoreGroups,
-		"readMessages": inst.ReadMessages,
+		"rejectCalls":       inst.RejectCalls,
+		"alwaysOnline":      inst.AlwaysOnline,
+		"ignoreGroups":      inst.IgnoreGroups,
+		"readMessages":      inst.ReadMessages,
+		"skipVideoDownload": inst.SkipVideoDownload,
 	}
 }
 
