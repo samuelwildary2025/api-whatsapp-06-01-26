@@ -25,6 +25,7 @@ import {
     Edit as EditIcon,
     Smile,
     Image as ImageIcon,
+    Video,
     Trash2,
     Plus,
     X,
@@ -61,6 +62,7 @@ interface InstanceSettings {
     rejectCalls: boolean;
     readMessages: boolean;
     syncFullHistory: boolean;
+    skipVideoDownload: boolean;
 }
 
 interface ProxyConfig {
@@ -96,6 +98,7 @@ function InstanceDetailContent() {
         rejectCalls: false,
         readMessages: false,
         syncFullHistory: false,
+        skipVideoDownload: false,
     });
     const [savingSettings, setSavingSettings] = useState(false);
 
@@ -1176,6 +1179,27 @@ function InstanceDetailContent() {
                                         </div>
                                     </div>
                                     {settings.syncFullHistory ? (
+                                        <ToggleRight className="w-8 h-8 text-[var(--success)]" />
+                                    ) : (
+                                        <ToggleLeft className="w-8 h-8 text-[var(--muted)]" />
+                                    )}
+                                </div>
+
+                                {/* Skip Video Download */}
+                                <div
+                                    onClick={() => toggleSetting('skipVideoDownload')}
+                                    className="flex items-center justify-between p-4 rounded-lg border border-[var(--border)] hover:bg-[var(--card)] cursor-pointer transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <div className="w-10 h-10 rounded-lg bg-red-500/10 flex items-center justify-center">
+                                            <Video className="w-5 h-5 text-red-500" />
+                                        </div>
+                                        <div>
+                                            <p className="font-medium">Pular Download de Vídeos</p>
+                                            <p className="text-sm text-[var(--muted)]">Economiza memória ao não baixar vídeos</p>
+                                        </div>
+                                    </div>
+                                    {settings.skipVideoDownload ? (
                                         <ToggleRight className="w-8 h-8 text-[var(--success)]" />
                                     ) : (
                                         <ToggleLeft className="w-8 h-8 text-[var(--muted)]" />
